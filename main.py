@@ -214,7 +214,7 @@ if not up_kin or not up_gyr:
 # Leitura + preprocess
 try:
     df_kin = _read_flexible_table(up_kin)
-    kin = preprocess_kinematic(df_kin, fs=120.0)
+    kin = preprocess_kinematic(df_kin, fs=100.0)
 except Exception as e:
     st.error(f"Erro na cinêmica: {e}")
     st.stop()

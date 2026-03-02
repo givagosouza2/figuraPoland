@@ -9,60 +9,73 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Sincronização Cinêmica + Giroscópio (sem SciPy/pandas)", layout="wide")
 st.title("🧭 Sincronização: Cinêmica (120 Hz) + Giroscópio (→100 Hz, detrend, LPF 1.5 Hz, norma) — sem SciPy/pandas")
 
-# -----------------------------
-# Leitura robusta (polars)
-# -----------------------------
+# =========================================================
+# Leitura robusta (polars) — CORRIGIDA (não quebra CSV com ',')
+# =========================================================
 def _bytes_to_text(uploaded_file) -> str:
     raw = uploaded_file.getvalue()
-    text = raw.decode("utf-8", errors="replace")
-    # troca decimal vírgula por ponto dentro de números
-    text = re.sub(r"(?<=\d),(?=\d)", ".", text)
-    return text
+    return raw.decode("utf-8", errors="replace")
+
+
+def _fix_decimal_comma(text: str) -> str:
+    # Converte decimal "1,23" -> "1.23" sem mexer no separador quando ele é ','
+    return re.sub(r"(?<=\d),(?=\d)", ".", text)
+
 
 def _read_flexible_table(uploaded_file) -> pl.DataFrame:
-    text = _bytes_to_text(uploaded_file)
+    text_raw = _bytes_to_text(uploaded_file)
 
-    # tenta separadores comuns
-    seps = [";", "\t", ",", None]  # None -> whitespace (via regex)
-    last_err = None
-
-    for sep in seps:
+    # 1) Tenta ler "como está" (não mexe em vírgulas: essencial quando sep=',')
+    for sep in [",", ";", "\t"]:
         try:
-            if sep is None:
-                # whitespace: normaliza múltiplos espaços/tabs em um único espaço
-                text_ws = re.sub(r"[ \t]+", " ", text.strip())
-                df = pl.read_csv(
-                    io.StringIO(text_ws),
-                    separator=" ",
-                    has_header=True,
-                    ignore_errors=True,
-                    infer_schema_length=2000,
-                )
-            else:
-                df = pl.read_csv(
-                    io.StringIO(text),
-                    separator=sep,
-                    has_header=True,
-                    ignore_errors=True,
-                    infer_schema_length=2000,
-                )
-
-            # se veio só 1 coluna, provavelmente o separador não bateu
+            df = pl.read_csv(
+                io.StringIO(text_raw),
+                separator=sep,
+                has_header=True,
+                ignore_errors=True,
+                infer_schema_length=2000,
+            )
             if df.width >= 3 and df.height > 0:
                 return df
-        except Exception as e:
-            last_err = e
+        except Exception:
+            pass
 
-    raise ValueError(f"Não consegui ler a tabela. Erro: {last_err}")
+    # 2) Se falhou, tenta corrigir decimal vírgula (caso sep=';' ou '\t')
+    text_fixed = _fix_decimal_comma(text_raw)
+    for sep in [";", "\t", ","]:
+        try:
+            df = pl.read_csv(
+                io.StringIO(text_fixed),
+                separator=sep,
+                has_header=True,
+                ignore_errors=True,
+                infer_schema_length=2000,
+            )
+            if df.width >= 3 and df.height > 0:
+                return df
+        except Exception:
+            pass
+
+    # 3) fallback whitespace
+    text_ws = re.sub(r"[ \t]+", " ", text_raw.strip())
+    df = pl.read_csv(
+        io.StringIO(text_ws),
+        separator=" ",
+        has_header=True,
+        ignore_errors=True,
+        infer_schema_length=2000,
+    )
+    if df.width >= 3 and df.height > 0:
+        return df
+
+    raise ValueError("Não consegui ler a tabela com separadores comuns.")
+
 
 def _numeric_columns(df: pl.DataFrame) -> list[str]:
-    # tenta converter tudo para float (mantendo colunas que viram numéricas)
     cols = []
     for c in df.columns:
-        s = df[c]
         try:
-            s2 = s.cast(pl.Float64, strict=False)
-            # considera numérica se tiver pelo menos metade dos valores não-nulos
+            s2 = df[c].cast(pl.Float64, strict=False)
             non_null = s2.drop_nulls().len()
             if non_null >= max(5, int(0.5 * df.height)):
                 cols.append(c)
@@ -70,31 +83,32 @@ def _numeric_columns(df: pl.DataFrame) -> list[str]:
             pass
     return cols
 
+
 def _to_numpy_numeric(df: pl.DataFrame, cols: list[str]) -> np.ndarray:
     out = []
     for c in cols:
         out.append(df[c].cast(pl.Float64, strict=False).to_numpy())
     return np.column_stack(out)
 
-# -----------------------------
-# Processamento sem SciPy
-# -----------------------------
+
+# =========================================================
+# Processamento sem SciPy (detrend + filtro LPF 1.5 Hz)
+# =========================================================
 def infer_time_unit(t: np.ndarray) -> float:
-    """Heurística para converter tempo para segundos."""
     t = np.asarray(t, dtype=float)
     t = t[np.isfinite(t)]
     if len(t) < 2:
         return 1.0
     span = t.max() - t.min()
     dt_med = np.median(np.diff(t))
-    if span > 1e5:      # muito grande: microsegundos
+    if span > 1e5:  # microsegundos
         return 1e-6
-    if span > 1e2 and dt_med > 0.5:  # provável milissegundos
+    if span > 1e2 and dt_med > 0.5:  # milissegundos
         return 1e-3
     return 1.0
 
+
 def resample_to_fs(t_s: np.ndarray, xyz: np.ndarray, fs_target: float) -> tuple[np.ndarray, np.ndarray]:
-    """Interpolação linear para grade uniforme."""
     t_s = np.asarray(t_s, dtype=float)
     xyz = np.asarray(xyz, dtype=float)
 
@@ -102,7 +116,6 @@ def resample_to_fs(t_s: np.ndarray, xyz: np.ndarray, fs_target: float) -> tuple[
     t_s = t_s[order]
     xyz = xyz[order]
 
-    # remove tempos repetidos
     keep = np.ones_like(t_s, dtype=bool)
     keep[1:] = np.diff(t_s) > 0
     t_s = t_s[keep]
@@ -115,17 +128,17 @@ def resample_to_fs(t_s: np.ndarray, xyz: np.ndarray, fs_target: float) -> tuple[
     xyz_new = np.column_stack([np.interp(t_new, t_s, xyz[:, i]) for i in range(3)])
     return t_new, xyz_new
 
+
 def detrend_linear(y: np.ndarray, t: np.ndarray) -> np.ndarray:
-    """Remove tendência linear: y - (a*t + b)."""
     y = np.asarray(y, dtype=float)
     t = np.asarray(t, dtype=float)
     A = np.column_stack([t, np.ones_like(t)])
-    coef, *_ = np.linalg.lstsq(A, y, rcond=None)  # [a, b]
+    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
     trend = A @ coef
     return y - trend
 
+
 def lowpass_iir_1st(x: np.ndarray, fs: float, fc: float) -> np.ndarray:
-    """Filtro passa-baixa IIR 1ª ordem (RC)."""
     x = np.asarray(x, dtype=float)
     dt = 1.0 / fs
     RC = 1.0 / (2.0 * np.pi * fc)
@@ -134,18 +147,15 @@ def lowpass_iir_1st(x: np.ndarray, fs: float, fc: float) -> np.ndarray:
     y = np.empty_like(x)
     y[0] = x[0]
     for i in range(1, len(x)):
-        y[i] = y[i-1] + alpha * (x[i] - y[i-1])
+        y[i] = y[i - 1] + alpha * (x[i] - y[i - 1])
     return y
 
+
 def zero_phase_lowpass(x: np.ndarray, fs: float, fc: float) -> np.ndarray:
-    """
-    Aproximação de filtfilt:
-    - filtra para frente
-    - inverte e filtra de novo
-    """
     y_f = lowpass_iir_1st(x, fs, fc)
     y_b = lowpass_iir_1st(y_f[::-1], fs, fc)[::-1]
     return y_b
+
 
 def preprocess_gyro(df: pl.DataFrame, fs_target=100.0, fc=1.5) -> dict:
     num_cols = _numeric_columns(df)
@@ -157,18 +167,16 @@ def preprocess_gyro(df: pl.DataFrame, fs_target=100.0, fc=1.5) -> dict:
     g = arr[:, 1:4]
 
     factor = infer_time_unit(t)
-    t_s = (t - t[0]) * factor  # zera no início
+    t_s = (t - t[0]) * factor
 
     t100, g100 = resample_to_fs(t_s, g, fs_target)
 
-    # detrend linear por eixo
     g_dt = np.column_stack([detrend_linear(g100[:, i], t100) for i in range(3)])
-
-    # passa-baixa 1.5 Hz (zero-phase aproximado)
     g_f = np.column_stack([zero_phase_lowpass(g_dt[:, i], fs_target, fc) for i in range(3)])
 
     norm = np.sqrt(np.sum(g_f**2, axis=1))
     return {"t": t100, "gx": g_f[:, 0], "gy": g_f[:, 1], "gz": g_f[:, 2], "norm": norm, "fs": fs_target}
+
 
 def preprocess_kinematic(df: pl.DataFrame, fs=120.0) -> dict:
     num_cols = _numeric_columns(df)
@@ -179,8 +187,8 @@ def preprocess_kinematic(df: pl.DataFrame, fs=120.0) -> dict:
     t = np.arange(n, dtype=float) / fs
     return {"t": t, "x": arr[:, 0], "y": arr[:, 1], "z": arr[:, 2], "fs": fs}
 
+
 def suggest_trigger_time(t: np.ndarray, sig: np.ndarray) -> float:
-    """Sugere trigger pelo maior pico na derivada absoluta."""
     sig = np.asarray(sig, dtype=float)
     t = np.asarray(t, dtype=float)
     if len(sig) < 5:
@@ -189,9 +197,10 @@ def suggest_trigger_time(t: np.ndarray, sig: np.ndarray) -> float:
     idx = int(np.argmax(d))
     return float(t[min(idx + 1, len(t) - 1)])
 
-# -----------------------------
-# Upload
-# -----------------------------
+
+# =========================================================
+# UI: Upload
+# =========================================================
 colA, colB = st.columns(2)
 with colA:
     up_kin = st.file_uploader("📄 Arquivo Cinêmica (X,Y,Z) — 120 Hz", type=["csv", "txt"])
@@ -202,6 +211,7 @@ if not up_kin or not up_gyr:
     st.info("Carregue os dois arquivos para começar.")
     st.stop()
 
+# Leitura + preprocess
 try:
     df_kin = _read_flexible_table(up_kin)
     kin = preprocess_kinematic(df_kin, fs=120.0)
@@ -216,21 +226,23 @@ except Exception as e:
     st.error(f"Erro no giroscópio: {e}")
     st.stop()
 
-# sugestões de trigger (salto: cinemática Z e giroscópio Y)
-t0_kin_sug = suggest_trigger_time(kin["t"], kin["z"])
-t0_gyr_sug = suggest_trigger_time(gyr["t"], gyr["gy"])
+# Sugestões de trigger
+t0_kin_sug = suggest_trigger_time(kin["t"], kin["z"])   # salto no Z
+t0_gyr_sug = suggest_trigger_time(gyr["t"], gyr["gy"])  # salto no Y
 
-# -----------------------------
+# =========================================================
 # Controles
-# -----------------------------
+# =========================================================
 st.subheader("1) Definir o trigger (tempo zero) em cada sinal")
-
 c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
+
 with c1:
     kin_axis = st.selectbox("Cinêmica para plot (eixo)", ["y", "z"], index=1)
+
 with c2:
     invert_kin = st.checkbox("Inverter cinêmica (× -1)", value=False)
     invert_gyr_y = st.checkbox("Inverter giroscópio Y (× -1)", value=False)
+
 with c3:
     st.caption("Ajuste os triggers até alinhar os saltos em t=0.")
 
@@ -241,14 +253,14 @@ t0_kin = st.slider(
     "Trigger na Cinêmica (s) — referência: salto no Z",
     min_value=t_kin_min, max_value=t_kin_max,
     value=float(np.clip(t0_kin_sug, t_kin_min, t_kin_max)),
-    step=1.0/120.0
+    step=1.0 / 120.0
 )
 
 t0_gyr = st.slider(
     "Trigger no Giroscópio (s) — referência: salto no Y",
     min_value=t_gyr_min, max_value=t_gyr_max,
     value=float(np.clip(t0_gyr_sug, t_gyr_min, t_gyr_max)),
-    step=1.0/100.0
+    step=1.0 / 100.0
 )
 
 kin_sig = kin[kin_axis].copy()
@@ -259,15 +271,13 @@ gyr_y = gyr["gy"].copy()
 if invert_gyr_y:
     gyr_y = -gyr_y
 
-# tempo sincronizado
 tkin_sync = kin["t"] - t0_kin
 tgyr_sync = gyr["t"] - t0_gyr
 
-# -----------------------------
+# =========================================================
 # Janela temporal
-# -----------------------------
+# =========================================================
 st.subheader("2) Selecionar janela temporal de visualização")
-
 tmin_common = max(float(tkin_sync.min()), float(tgyr_sync.min()))
 tmax_common = min(float(tkin_sync.max()), float(tgyr_sync.max()))
 if tmin_common >= tmax_common:
@@ -286,12 +296,12 @@ t_start, t_end = win
 mask_kin = (tkin_sync >= t_start) & (tkin_sync <= t_end)
 mask_gyr = (tgyr_sync >= t_start) & (tgyr_sync <= t_end)
 
-# -----------------------------
+# =========================================================
 # Plot duplo
-# -----------------------------
+# =========================================================
 st.subheader("3) Plot duplo (cinêmica vs norma do giroscópio)")
-
 fig, ax1 = plt.subplots()
+
 ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin])
 ax1.set_xlabel("Tempo sincronizado (s)")
 ax1.set_ylabel(f"Cinêmica {kin_axis.upper()} (unid. original)")
@@ -305,6 +315,7 @@ st.pyplot(fig, use_container_width=True)
 
 with st.expander("🔎 Diagnóstico: sinais usados para trigger (Z cinêmica e Y giroscópio)"):
     fig2, bx1 = plt.subplots()
+
     z_ref = kin["z"].copy()
     if invert_kin:
         z_ref = -z_ref

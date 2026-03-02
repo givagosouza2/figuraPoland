@@ -327,6 +327,7 @@ with st.expander("🔎 Diagnóstico: sinais usados para trigger (Z cinêmica e Y
     bx2 = bx1.twinx()
     bx2.plot(tgyr_sync[mask_gyr], gyr_y[mask_gyr])
     bx2.set_ylabel("Giroscópio Y (ref. salto)")
+    bx2.xlim(tgyr_sync[mask_gyr][0],tgyr_sync[mask_gyr][1])
 
     st.pyplot(fig2, use_container_width=True)
 

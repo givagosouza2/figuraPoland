@@ -178,7 +178,7 @@ def preprocess_gyro(df: pl.DataFrame, fs_target=100.0, fc=1.5) -> dict:
     return {"t": t100, "gx": g_f[:, 0], "gy": g_f[:, 1], "gz": g_f[:, 2], "norm": norm, "fs": fs_target}
 
 
-def preprocess_kinematic(df: pl.DataFrame, fs=100.0) -> dict:
+def preprocess_kinematic(df: pl.DataFrame, fs=120.0) -> dict:
     num_cols = _numeric_columns(df)
     if len(num_cols) < 3:
         raise ValueError(f"Cinêmica: esperado >=3 colunas numéricas (X,Y,Z). Achei {len(num_cols)}.")

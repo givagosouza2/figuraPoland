@@ -319,7 +319,7 @@ with st.expander("🔎 Diagnóstico: sinais usados para trigger (Z cinêmica e Y
     z_ref = kin["z"].copy()
     if invert_kin:
         z_ref = -z_ref
-    bx1.plot(tkin_sync[mask_kin], z_ref[mask_kin])
+    bx1.plot(tkin_sync[mask_kin], z_ref[mask_kin],'-k')
     bx1.set_xlabel("Tempo sincronizado (s)")
     bx1.set_ylabel("Cinêmica Z (ref. salto)")
     bx1.axvline(0, linestyle="--", linewidth=1)

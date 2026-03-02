@@ -304,7 +304,7 @@ fig, ax1 = plt.subplots()
 
 ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin],'-k')
 ax1.set_xlabel("Time (s)")
-ax1.set_ylabel(f"Vertical displacement (m)")
+ax1.set_ylabel(f"Antero-posterior displacement (m)")
 ax1.axvline(0, linestyle="--", linewidth=1)
 ax1.set_xlim(t_start, t_end)
 

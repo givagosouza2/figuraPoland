@@ -306,6 +306,7 @@ ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin],'-k')
 ax1.set_xlabel("Tempo sincronizado (s)")
 ax1.set_ylabel(f"Cinêmica {kin_axis.upper()} (unid. original)")
 ax1.axvline(0, linestyle="--", linewidth=1)
+ax1.set_xlim(t_start, t_end)
 
 ax2 = ax1.twinx()
 ax2.plot(tgyr_sync[mask_gyr], gyr["norm"][mask_gyr])
@@ -327,7 +328,7 @@ with st.expander("🔎 Diagnóstico: sinais usados para trigger (Z cinêmica e Y
     bx2 = bx1.twinx()
     bx2.plot(tgyr_sync[mask_gyr], gyr_y[mask_gyr])
     bx2.set_ylabel("Giroscópio Y (ref. salto)")
-    bx2.set_xlim(tgyr_sync[mask_gyr][0],tgyr_sync[mask_gyr][1])
+    
 
     st.pyplot(fig2, use_container_width=True)
 

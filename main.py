@@ -302,7 +302,7 @@ mask_gyr = (tgyr_sync >= t_start) & (tgyr_sync <= t_end)
 st.subheader("3) Plot duplo (cinêmica vs norma do giroscópio)")
 fig, ax1 = plt.subplots()
 
-ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin])
+ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin],'-k')
 ax1.set_xlabel("Tempo sincronizado (s)")
 ax1.set_ylabel(f"Cinêmica {kin_axis.upper()} (unid. original)")
 ax1.axvline(0, linestyle="--", linewidth=1)

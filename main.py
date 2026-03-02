@@ -308,11 +308,11 @@ ax1.set_ylabel(f"Vertical displacement (m)")
 ax1.axvline(0, linestyle="--", linewidth=1)
 ax1.set_xlim(t_start, t_end)
 
-ax2 = ax1.twinx()
-ax2.plot(tgyr_sync[mask_gyr], gyr["norm"][mask_gyr],'-w')
-ax2.set_ylabel(" Angular velocity (rad/s)")
+#ax2 = ax1.twinx()
+#ax2.plot(tgyr_sync[mask_gyr], gyr["norm"][mask_gyr],'-w')
+#ax2.set_ylabel(" Angular velocity (rad/s)")
 
-#st.pyplot(fig, use_container_width=True)
+st.pyplot(fig, use_container_width=True)
 
 with st.expander("🔎 Diagnóstico: sinais usados para trigger (Z cinêmica e Y giroscópio)"):
     fig2, bx1 = plt.subplots()

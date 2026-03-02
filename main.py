@@ -309,7 +309,7 @@ fig, ax1 = plt.subplots()
 #ax1.set_xlim(t_start, t_end)
 
 #ax2 = ax1.twinx()
-ax1.plot(tgyr_sync[mask_gyr], gyr["norm"][mask_gyr],'-w')
+ax1.plot(tgyr_sync[mask_gyr], gyr["norm"][mask_gyr],'-k')
 ax1.set_ylabel(" Angular velocity (rad/s)")
 ax1.set_xlim(t_start, t_end)
 st.pyplot(fig, use_container_width=True)

@@ -303,7 +303,7 @@ st.subheader("3) Plot duplo (cinêmica vs norma do giroscópio)")
 fig, ax1 = plt.subplots()
 
 #ax1.plot(tkin_sync[mask_kin], kin_sig[mask_kin]/1000,'-k')
-#ax1.set_xlabel("Time (s)")
+ax1.set_xlabel("Time (s)")
 #ax1.set_ylabel(f"Vertical displacement (m)")
 #ax1.axvline(0, linestyle="--", linewidth=1)
 #ax1.set_xlim(t_start, t_end)
